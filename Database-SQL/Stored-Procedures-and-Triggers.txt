@@ -1,0 +1,215 @@
+DROP PROCEDURE IF EXISTS information_for_each_article;
+DELIMITER $
+CREATE PROCEDURE information_for_each_article(IN numissue INT, IN newspname VARCHAR(50))
+BEGIN
+DECLARE tempstartpage INT;
+DECLARE temppath VARCHAR(255);
+DECLARE count INT;
+DECLARE remaining INT;
+DECLARE flag INT;
+DECLARE artcursor CURSOR FOR 
+	SELECT path FROM article INNER JOIN determines ON path=path_article
+    	WHERE issue=numissue AND newspaper=newspname ORDER BY article_order ASC;
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET flag=1;
+OPEN artcursor;
+SET flag=0;
+FETCH artcursor INTO temppath;
+WHILE (flag=0) DO
+	CALL find_start_page(temppath,tempstartpage);	
+    
+	SELECT a.a1 'Article No.', b.b2 AS 'Title', b.b3 AS 'Approval Date', b.b4 AS 'Total Pages',c.c5 AS 'Starting Page' FROM
+	(SELECT article_order AS a1, NULL AS a2, NULL AS a3, NULL as a4, NULL as a5 
+	FROM determines WHERE path_article=temppath) AS a,    
+	(SELECT NULL AS b1, title AS b2, judgment_date AS b3, pages AS b4, NULL as b5
+	FROM article WHERE path=temppath) AS b,    
+	(SELECT NULL AS c1, NULL AS c2, NULL AS c3, NULL AS c4, tempstartpage AS c5) AS c;
+    
+	SELECT surname AS 'Author''s Surname', name AS 'Author''s Name' FROM employee 
+	INNER JOIN journalist ON email=employee_email
+	INNER JOIN submits ON journalist_email=employee_email
+	WHERE path_article=temppath ORDER BY surname ASC; 
+
+	FETCH artcursor INTO temppath;
+END WHILE;
+CLOSE artcursor;
+
+CALL find_remaining_pages(numissue,newspname,remaining);
+IF (remaining>0) THEN
+	SELECT remaining AS 'Available Pages';
+ELSE 
+	SELECT 'The issue is complete. There are no more pages left'; /*Den 3erw ean xreiazetai mhnuma. Mhpws to sbhsoume*/
+END IF;
+
+END$
+DELIMITER ;
+/******************************************/
+DROP PROCEDURE IF EXISTS salary_recalculation;
+DELIMITER $
+CREATE PROCEDURE salary_recalculation(IN jemail VARCHAR(100))
+BEGIN
+DECLARE psalary FLOAT(6,2); /*previously/at the moment salary */
+DECLARE work1 INT UNSIGNED; /*work experience before joining the company */
+DECLARE months INT UNSIGNED; /*months working for the company */
+DECLARE hdate DATE;
+DECLARE hdatem INT;
+DECLARE hdatey INT;
+DECLARE currm INT;
+DECLARE curry INT;
+DECLARE work2 INT UNSIGNED;
+DECLARE raise FLOAT(7,2);
+
+
+SELECT salary INTO psalary FROM employee WHERE email=jemail;
+SELECT work_experience INTO work1 FROM journalist WHERE employee_email=jemail;
+SELECT hire_date INTO hdate FROM employee WHERE email=jemail;
+SET hdatem=MONTH(hdate);
+SET hdatey=YEAR(hdate);
+SET currm=MONTH(CURRENT_DATE());
+SET curry=YEAR(CURRENT_DATE());
+SET work2= currm-hdatem + (curry-hdatey)*12;
+SET raise= 650*0.005*(work1+work2)+psalary; /*0.5%=0.005 */
+
+UPDATE employee SET salary= raise WHERE email=jemail;
+
+END$
+DELIMITER ;
+/******************************************/
+DROP PROCEDURE IF EXISTS find_remaining_pages;
+DELIMITER $
+/*Dineis ton ari8mo fullou kai to onoma efimeridas kai epistrefei to plh8os twn selidwn pou menoun gia gemisei*/
+CREATE PROCEDURE find_remaining_pages(IN numissue INT, IN newspname VARCHAR(50), OUT remaining_pages INT)
+BEGIN
+DECLARE ipages INT; /* issue's pages */
+DECLARE curpages INT;/* current pages taken by articles in the issue */
+DECLARE tpages INT; /* issue's pages */
+DECLARE temppath VARCHAR(255); /* temporary path */
+DECLARE flag INT;
+DECLARE artcursor CURSOR FOR 
+	SELECT path FROM article INNER JOIN determines ON path=path_article
+    	WHERE issue=numissue AND newspaper=newspname AND judgment='Accepted' ORDER BY article_order ASC; /*judgment='Accepted'=> mporei na einai peritto */
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET flag=1;
+OPEN artcursor;
+SET flag=0;
+SET curpages=0;
+FETCH artcursor INTO temppath;
+WHILE (flag=0) DO
+	SELECT pages INTO tpages FROM article WHERE path=temppath;
+	SET curpages=curpages+tpages; 
+
+	FETCH artcursor INTO temppath;
+END WHILE;
+CLOSE artcursor;
+
+SELECT pages INTO ipages FROM issue WHERE number_issue=numissue AND newspaper_name=newspname;
+SET remaining_pages= ipages-curpages;
+/* IF (remaining_pages<0) THEN
+	SET tpages= -remaining_pages;
+	SELECT 'ERROR! Ôhere are more pages in this issue than allowed';
+	SELECT tpages AS 'Extra Pages';
+*/
+END$
+DELIMITER ;
+/******************************************/
+DROP PROCEDURE IF EXISTS find_start_page;
+DELIMITER $
+/*Dineis to path enos ar8rou kai bgazei thn selida pou 3ekinaei*/
+CREATE PROCEDURE find_start_page(IN article_path VARCHAR(255), OUT start_page INT)
+BEGIN
+DECLARE artorder INT; /*article order */
+DECLARE previous INT;
+DECLARE temppages INT;
+DECLARE temppath VARCHAR(255);
+DECLARE tempnewspaper VARCHAR(50);
+DECLARE tempissue INT;
+SET previous=0;
+SET temppages=0;
+SELECT newspaper, issue, path INTO tempnewspaper, tempissue, temppath FROM article WHERE path=article_path; /*Briskeis thn efhmerida kai to fullo pou exei dhmosieu8ei to ar8ro + Bazw to temppath gia na einai koinos o kwdikas se periptwsh epanalhpseis*/
+REPEAT
+	SELECT article_order INTO artorder FROM determines INNER JOIN article ON path_article=path
+        WHERE newspaper=tempnewspaper AND issue=tempissue AND path_article=temppath; /*Briskw thn seira tou ar8rou*/
+	IF(artorder=1) THEN /*if it is the first article of the issue */
+		SET start_page=1;
+        SET artorder=artorder-1;
+	ELSE /*If it is NOT the first article // briskw to plh8os twn selidwn ka8e tou prohgoumenh se seira ar8ou (idias efhmeridas kai ar8rou)*/
+		SELECT path_article INTO temppath FROM determines INNER JOIN article ON path_article=path
+                WHERE article_order=artorder-1 AND newspaper=tempnewspaper AND issue=tempissue;        
+                SELECT pages INTO temppages FROM article WHERE path=temppath;
+                SET previous=previous+temppages;
+                SET artorder=artorder-1;
+                SET temppages=0;
+	END IF;
+UNTIL(artorder=0)
+END REPEAT;
+SET start_page=start_page+previous; /*output variable*/
+END$
+DELIMITER ;
+/******************************************/
+/******************************************/
+DROP TRIGGER IF EXISTS new_employee_salary;
+DELIMITER $
+CREATE TRIGGER new_employee_salary
+BEFORE INSERT ON employee
+FOR EACH ROW
+BEGIN
+SET NEW.salary=650.00;
+END$
+DELIMITER ;
+/******************************************/
+DROP TRIGGER IF EXISTS accept_without_check;
+DELIMITER $
+CREATE TRIGGER accept_without_check
+BEFORE INSERT ON submits
+FOR EACH ROW
+BEGIN
+DECLARE curreditor VARCHAR(100);
+DECLARE flag INT;
+DECLARE edcursor CURSOR FOR 
+	SELECT journalist_email FROM editor;
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET flag=1;
+OPEN edcursor;
+SET flag=0;
+FETCH edcursor INTO curreditor;
+WHILE (flag=0) DO
+	IF (NEW.journalist_email LIKE curreditor) THEN
+		UPDATE article SET judgment='Accepted' WHERE path=NEW.path_article;
+		UPDATE article SET judgment_date= DEFAULT WHERE path=NEW.path_article;
+	END IF;
+
+	FETCH edcursor INTO curreditor;
+END WHILE;
+CLOSE edcursor;
+
+END$
+DELIMITER ;
+/******************************************/
+DROP TRIGGER IF EXISTS checking_for_space;
+DELIMITER $
+CREATE TRIGGER checking_for_space
+BEFORE INSERT ON article
+FOR EACH ROW
+BEGIN
+DECLARE judge ENUM('Accepted','To_be_revised','Rejected');
+DECLARE remaining INT;
+CALL find_remaining_pages(NEW.issue,NEW.newspaper,remaining);
+IF (NEW.judgment='Accepted' AND NEW.pages>remaining) THEN
+	SIGNAL SQLSTATE VALUE '45000'
+	SET MESSAGE_TEXT = 'Not enough space in the issue.';
+END IF;
+END$
+DELIMITER ;
+/******************************************/
+DROP TRIGGER IF EXISTS checking_for_space2;
+DELIMITER $
+CREATE TRIGGER checking_for_space2
+AFTER UPDATE ON article
+FOR EACH ROW
+BEGIN
+DECLARE judge ENUM('Accepted','To_be_revised','Rejected'); 
+DECLARE remaining INT;
+CALL find_remaining_pages(NEW.issue,NEW.newspaper,remaining);
+IF (NEW.judgment='Accepted' AND NEW.pages>remaining) THEN
+	SIGNAL SQLSTATE VALUE '45000'
+	SET MESSAGE_TEXT = 'Not enough space in the issue.';
+END IF;
+END$
+DELIMITER ;

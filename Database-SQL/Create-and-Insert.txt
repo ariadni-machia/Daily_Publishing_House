@@ -1,0 +1,323 @@
+DROP DATABASE IF EXISTS daily_publishing_house;
+CREATE DATABASE daily_publishing_house;
+USE daily_publishing_house;
+
+CREATE TABLE IF NOT EXISTS newspaper(
+    name VARCHAR(50) NOT NULL,
+    publisher_name VARCHAR(50) NOT NULL,
+    publisher_surname VARCHAR(50) NOT NULL,
+    publisher_email VARCHAR(100) NOT NULL,
+    publication_frequency ENUM('DAILY','WEEKLY','MONTHLY') NOT NULL,
+    PRIMARY KEY(name)
+);
+
+CREATE TABLE IF NOT EXISTS employee(
+    email VARCHAR(100) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    surname VARCHAR(50) NOT NULL,
+    salary FLOAT(6,2) DEFAULT '650.00' NOT NULL,
+    hire_date DATE DEFAULT(CURRENT_DATE()+1) NOT NULL,
+    PRIMARY KEY(email)
+);
+
+CREATE TABLE IF NOT EXISTS issue(
+    newspaper_name VARCHAR(50) NOT NULL,
+    number_issue INT NOT NULL,
+    pages INT DEFAULT 30 NOT NULL,
+    release_date DATE NOT NULL,
+    copies INT UNSIGNED NOT NULL,
+    not_sold INT UNSIGNED,
+    PRIMARY KEY(newspaper_name,number_issue),
+    UNIQUE INDEX index_number_issue (number_issue), /*gia na dhmiourgh8ei kai enas 3exwristos index gia "number_issue" wste na mhn exoume 8ema sto foreign key tou article poy 8a dexnei pros auto*/
+    CONSTRAINT ISSUENUMBER FOREIGN KEY(newspaper_name) REFERENCES newspaper(name)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS works(
+    newspaper_name VARCHAR(50) NOT NULL,
+    employee_email VARCHAR(100) NOT NULL,
+    PRIMARY KEY(newspaper_name,employee_email),
+    CONSTRAINT WORKSNPNAME FOREIGN KEY(newspaper_name) REFERENCES newspaper(name)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT WORKSEMPEMAIL FOREIGN KEY(employee_email) REFERENCES employee(email)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS journalist(
+    employee_email VARCHAR(100) NOT NULL,
+    brief_CV TEXT NOT NULL,
+    work_experience INT UNSIGNED NOT NULL, /* months */
+    PRIMARY KEY(employee_email),
+    CONSTRAINT JOURNALISTEMPEMAIL FOREIGN KEY(employee_email) REFERENCES employee(email)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS administrative(
+    employee_email VARCHAR(100) NOT NULL,
+    street VARCHAR(30) DEFAULT 'unknown',
+    number SMALLINT UNSIGNED DEFAULT '0',
+    city VARCHAR(30) DEFAULT 'unknown',
+    duties ENUM('Secretary','Logistics') NOT NULL,
+    PRIMARY KEY(employee_email),
+    CONSTRAINT ADMINISTRATOREMPEMAIL FOREIGN KEY(employee_email) REFERENCES employee(email)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS phone_numbers(
+    administrative_email VARCHAR(100) NOT NULL,
+    phone_number INT UNSIGNED NOT NULL,
+    PRIMARY KEY(administrative_email,phone_number),
+    CONSTRAINT PHONENUMBERSADMEMAIL FOREIGN KEY(administrative_email) REFERENCES administrative(employee_email)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS category(
+    code INT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(250) DEFAULT 'unknown' NOT NULL,
+    description TEXT,
+    parent INT,
+    PRIMARY KEY(code),
+    CONSTRAINT CATEGORYPARENT FOREIGN KEY (parent) REFERENCES category(code) 
+    ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS editor(
+    journalist_email VARCHAR(100) NOT NULL,
+    appointed_by VARCHAR(50) NOT NULL,
+    PRIMARY KEY(journalist_email),
+    CONSTRAINT EDITORJEMAIL FOREIGN KEY (journalist_email) REFERENCES journalist(employee_email) 
+    ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT EDITORAPPOINTEDBY FOREIGN KEY (appointed_by) REFERENCES newspaper(name) 
+    ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS inserts(
+    category INT NOT NULL,
+    editor VARCHAR(100) NOT NULL,
+    PRIMARY KEY(category,editor),
+    CONSTRAINT INSERTSCATEGORY FOREIGN KEY (category) REFERENCES category(code) 
+    ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT INSERTSEDITEMAIL FOREIGN KEY (editor) REFERENCES editor(journalist_email) 
+    ON UPDATE CASCADE ON DELETE CASCADE    
+);
+
+CREATE TABLE IF NOT EXISTS article(
+    path VARCHAR(255) NOT NULL,
+    title VARCHAR(250) DEFAULT 'Title' NOT NULL,
+    summary TEXT NOT NULL,
+    pages INT DEFAULT '1' NOT NULL,
+    category INT NOT NULL,
+    newspaper VARCHAR(50) NOT NULL,
+    issue INT NOT NULL,
+    auditor VARCHAR(100) NOT NULL,
+    judgment ENUM('Accepted','To_be_revised','Rejected'),
+    comments TEXT,
+    judgment_date DATETIME DEFAULT(CURRENT_TIMESTAMP()),
+    PRIMARY KEY(path),
+    CONSTRAINT ARTICLECATEGORY FOREIGN KEY(category) REFERENCES category(code)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT ARTICLENEWSPAPER FOREIGN KEY(newspaper) REFERENCES issue(newspaper_name)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT ARTICLEISSUE FOREIGN KEY(issue) REFERENCES issue(number_issue)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT ARTICLEAUDITOR FOREIGN KEY(auditor) REFERENCES editor(journalist_email)
+    ON DELETE CASCADE ON UPDATE CASCADE  
+);
+
+CREATE TABLE IF NOT EXISTS key_words(
+    path_article  VARCHAR(255) NOT NULL,
+    key_word VARCHAR(30) NOT NULL,
+    PRIMARY KEY(path_article,key_word),
+    CONSTRAINT KEYWORDSPATH FOREIGN KEY(path_article) REFERENCES article(path)
+    ON DELETE CASCADE ON UPDATE CASCADE  
+);
+
+CREATE TABLE IF NOT EXISTS determines(
+    path_article VARCHAR(255) NOT NULL,
+    editor VARCHAR(100) NOT NULL,
+    article_order INT NOT NULL,
+    PRIMARY KEY(path_article,editor),
+    CONSTRAINT DETERMINESPATHARTICLE FOREIGN KEY(path_article) REFERENCES article(path)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT DETERMINESEDITOR FOREIGN KEY(editor) REFERENCES editor(journalist_email)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS submits(
+    journalist_email VARCHAR(100) NOT NULL,
+    path_article VARCHAR(255) NOT NULL,
+    submission_date DATETIME DEFAULT(CURRENT_TIMESTAMP()) NOT NULL, 
+    PRIMARY KEY(journalist_email,path_article),
+    CONSTRAINT SUBSMITSJEMAIL FOREIGN KEY(journalist_email) REFERENCES journalist(employee_email)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT SUBMITSPATHARTICLE FOREIGN KEY(path_article) REFERENCES article(path)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS images(
+    path_article  VARCHAR(255) NOT NULL,
+    image VARCHAR(255) NOT NULL,
+    PRIMARY KEY(path_article,image),
+    CONSTRAINT IMAGESPATH FOREIGN KEY(path_article) REFERENCES article(path)
+    ON DELETE CASCADE ON UPDATE CASCADE  
+);
+/******************************************/
+/******************************************/
+INSERT INTO newspaper VALUES
+	('Guardian','Mark','Jameson','jameson@gmail.com',"DAILY"),
+	('Times','James','Walker','walker@gmail.com',"WEEKLY"),
+	('News','Marie','Claire','marie@gmail.com',"WEEKLY"),
+	('Cosmopolitan','Marie','Claire','marie@gmail.com',"DAILY"),
+	('Fashion','Marie','Claire','marie@gmail.com',"WEEKLY");
+
+INSERT INTO employee VALUES
+	('tomas@gmail.com','Tomas','Shelby','4000.00','2020-03-13'),
+	('grace@hotmail.com','Grace','Shelby','2500.00','2020-03-15'),
+	('michael@gmail.com','Michael','Gray','2000.00','2020-03-15'),
+	('pgray@gmail.com','Polly','Gray','2500.00','2020-03-14'),
+	('alfie@hotmail.com','Alfie','Solomons','1000.00','2020-03-16'),
+	('arthur@gmail.com','Arthur','Shelby','3000.00','2020-03-14'),
+	('lizzie@gmail.com','Lizzie','Stark','1500.00','2020-03-16'),
+	('maria@gmail.com','Maria','Maraki','755.00','2020-02-10'),
+	('john@gmail.com','John','Shelby','800.00','2020-05-15'),
+	('blair@hotmail.com','Blair','Waldorf','2000.00','2020-06-15'),
+	('dan@gmail.com','Dan','Humphrey','1000.00','2020-07-15'),
+	('jenny@gmail.com','Jenny','Humphrey','800.00','2020-07-15'),
+	('auditor@gmail.com','Lady','Auditor','3500.00','2020-03-29');
+INSERT INTO issue VALUES
+	('Guardian','500','40','1999-05-15','100','1'),
+	('Guardian','400','60','1999-02-10','200','10'),
+	('Times','100','100','1999-04-04','500','50'),
+	('Times','50','80','1998-02-13','200','0'),
+	('Guardian','600','60','2020-10-30','200',null),
+	('Guardian','601','70','2020-11-01','150',null),
+	('Times','300','100','2020-10-17','200',null),
+	('Times','301','120','2020-10-24','200',null),
+	('Guardian','1200','15','2020-03-20','300','25'),
+	('News','1000','15','2020-03-20','300','25'),
+	('News','1500','150','2020-10-20','0',null),
+	('Cosmopolitan','1010','16','2020-12-21','0',null),
+	('Cosmopolitan','1700','25','2020-10-22','0',null),
+	('Fashion','1','16','2010-10-21','300',120),
+	('Fashion','2','20','2010-11-22','400',80),
+	('Fashion','3','22','2010-12-21','200',100),
+	('Fashion','4','21','2011-01-22','370',30);
+
+INSERT INTO works VALUES
+	('Guardian','tomas@gmail.com'),
+	('Guardian','pgray@gmail.com'),
+	('Guardian','lizzie@gmail.com'),
+	('Guardian','grace@hotmail.com'),
+	('Times','michael@gmail.com'),
+	('Guardian','maria@gmail.com'),
+	('News','arthur@gmail.com'),
+	('Cosmopolitan','jenny@gmail.com'),
+	('Cosmopolitan','blair@hotmail.com'),
+	('Cosmopolitan','dan@gmail.com'),
+	('Cosmopolitan','john@gmail.com'),
+	('Cosmopolitan','auditor@gmail.com');
+
+INSERT INTO journalist VALUES
+	
+	('michael@gmail.com','Michael Gray is the son of Polly Shelby, the cousin of the Shelby siblings and a powerful and high ranking member of the Peaky Blinders.
+
+	He is the Chief Accountant of Shelby Company Limited, a position that caused tensions between John Shelby and himself prior.','24'),
+	
+	
+
+	('grace@hotmail.com','Grace Helen Shelby was an Irish barmaid who took up employment at The Garrison Pub, and secretly operated as an undercover agent for the Birmingham Police.
+	Her mission involved getting close to Thomas Shelby whom she fell in love with. He too returned the sentiment but was heartbroken when he discovered her treachery.
+
+	Having left for New York, Grace returns mid-way through 1922, married to an American, but when she reunited with Thomas, it was clear their prior feelings have not dissipated.
+
+	The somewhat awkward reunion easily culminated into a brief tryst which led to Graces pregnancy.
+	She married Thomas sometime in 1924, following her husbands suicide.
+
+	She was later murdered from a bullet that was meant for Thomas Shelby.
+
+	After the incident she continued to haunt Thomas with her memories, who had not been able to get over her death.','36'),
+
+	('tomas@gmail.com','Thomas Michael Shelby is the leader of the Birmingham criminal gang, the Peaky Blinders and the patriarch of the Shelby Family.
+	Tommy served in World War I with the rank of Sergeant Major and was decorated for bravery.
+	His experiences in World War I left him disillusioned and beset with ongoing nightmares, and he becomes determined to move his family up in the world.
+	After the vendetta with the New York Mafia, and during the year of the Wall Street Crash, Thomas Shelby became a Member of Parliament as a socialist politician 
+	while lending the chair of the illegal business to his older brother, Arthur Shelby.','48'),
+	('maria@gmail.com','I am a journalist with dreams',12),
+	('arthur@gmail.com','I want to succeed!!!!',10),
+	('blair@hotmail.com','I am the best!',20),
+	('dan@gmail.com','I have many friends.',7),
+	('john@gmail.com','I am prety good.',9),
+	('auditor@gmail.com','I am an auditor.',20);
+
+INSERT INTO administrative VALUES
+	('lizzie@gmail.com','Aston Road','10','Birmingham','Secretary'),
+	('pgray@gmail.com','Union Road','20','Birmingham','Logistics'),
+	('jenny@gmail.com','Canal Street','120','New York','Secretary');
+
+INSERT INTO phone_numbers VALUES
+	('lizzie@gmail.com','1213450000'),
+	('pgray@gmail.com','1216780001'),
+	('jenny@gmail.com','1216781100');
+
+INSERT INTO category VALUES
+	('1','politics','Politics is the set of activities that are associated with the governance of a country, state or area.
+	It involves making decisions that apply to groups of members and achieving and exercising positions of governance—organized control over a human community.',NULL),
+	('2','economy','An economy is a system of making and trading things of value. It is usually divided into goods (physical things) and services (things done by people). 
+	It assumes there is medium of exchange, which in the modern world is a system of finance.',NULL),
+	('3','sports','An activity involving physical exertion and skill in which an individual or team competes against another or others for entertainment.',NULL),
+	('4','fun topics','Fun topics and tips from our writers to read with the whole family and have a blast.',NULL),
+	('5','social','Social Issues bring behavioral and social science theory, empirical evidence, and practice to bear on human and social problems.',NULL),
+	('6','cosmic','hehe its cosmic stuff. I dont know! okay? cool',NULL);
+
+INSERT INTO editor VALUES
+	('tomas@gmail.com','Guardian'),
+	('michael@gmail.com','Times'),
+	('auditor@gmail.com','Cosmopolitan');
+
+INSERT INTO inserts VALUES
+	('4','michael@gmail.com');
+
+INSERT INTO article VALUES
+	('C:\\Users\\Articles\\Submitted\\article1.docx','article1','its just an article about dogs.','1','4','Guardian','400','tomas@gmail.com','Accepted','great article!','2020-03-14 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article2.docx','article2','its just an article about working out.','1','4','Guardian','400','tomas@gmail.com','Accepted','Could be better.', DEFAULT),
+	('C:\\Users\\Articles\\Submitted\\article9.docx','Democracy',' Everything about democracy','5','1','Guardian','400','tomas@gmail.com','To_be_revised','You should talk about its differences over other system of government','2020-03-30 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article3.docx','article3','chocolate','2','4','Guardian','1200','tomas@gmail.com','Accepted','great article!','2020-03-18 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article4.docx','article4','cake','3','4','Guardian','1200','tomas@gmail.com','Accepted','Could be better.', DEFAULT),
+        ('C:\\Users\\Articles\\Submitted\\article5.docx','article5','brownies','4','4','Guardian','1200','tomas@gmail.com','Accepted','Excellent', '2020-03-18 12:30:00'),
+	('C:\\Users\\Articles\\Submitted\\article6.docx','article6','Aliens','5','4','Guardian','1200','tomas@gmail.com','Rejected','Rubbish! Aliens do not exists','2020-03-21 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article7.docx','article7','Shoes','5','4','Cosmopolitan','1010','auditor@gmail.com','To_be_revised','Use better language please, this is Cosmopolitan!','2020-07-22 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article8.docx','article8','Eyelashes','5','4','Cosmopolitan','1010','auditor@gmail.com','To_be_revised','hey','2020-10-22 00:00:00'),
+	('C:\\Users\\Articles\\Submitted\\article10.docx','article10','Dresses','5','4','Cosmopolitan','1010','auditor@gmail.com','To_be_revised','need to check it','2020-11-22 00:00:00');
+
+
+INSERT INTO key_words VALUES
+	('C:\\Users\\Articles\\Submitted\\article1.docx','dogs'),
+	('C:\\Users\\Articles\\Submitted\\article2.docx','working out'),
+	('C:\\Users\\Articles\\Submitted\\article2.docx','stay home');
+
+INSERT INTO determines VALUES
+	('C:\\Users\\Articles\\Submitted\\article1.docx','tomas@gmail.com','1'),
+	('C:\\Users\\Articles\\Submitted\\article2.docx','tomas@gmail.com','2'),
+	('C:\\Users\\Articles\\Submitted\\article3.docx','tomas@gmail.com','1'),
+	('C:\\Users\\Articles\\Submitted\\article4.docx','tomas@gmail.com','2'),
+        ('C:\\Users\\Articles\\Submitted\\article5.docx','tomas@gmail.com','3');
+
+INSERT INTO submits VALUES
+	('tomas@gmail.com','C:\\Users\\Articles\\Submitted\\article1.docx','2020-03-14'),
+	('grace@hotmail.com','C:\\Users\\Articles\\Submitted\\article2.docx','2020-03-14'),
+	('maria@gmail.com','C:\\Users\\Articles\\Submitted\\article9.docx','2020-03-29'),
+	('tomas@gmail.com','C:\\Users\\Articles\\Submitted\\article3.docx','2020-03-17'), 
+	('grace@hotmail.com','C:\\Users\\Articles\\Submitted\\article3.docx','2020-03-17'), 
+	('maria@gmail.com','C:\\Users\\Articles\\Submitted\\article3.docx','2020-03-17'), 
+	('tomas@gmail.com','C:\\Users\\Articles\\Submitted\\article4.docx','2020-03-17'), 
+	('grace@hotmail.com','C:\\Users\\Articles\\Submitted\\article4.docx','2020-03-17'), 
+	('grace@hotmail.com','C:\\Users\\Articles\\Submitted\\article5.docx','2020-03-17'),
+	('maria@gmail.com','C:\\Users\\Articles\\Submitted\\article6.docx','2020-03-20'),
+	('dan@gmail.com','C:\\Users\\Articles\\Submitted\\article7.docx','2020-07-20'),
+	('blair@hotmail.com','C:\\Users\\Articles\\Submitted\\article7.docx','2020-07-20'),
+	('john@gmail.com','C:\\Users\\Articles\\Submitted\\article7.docx','2020-07-20'),
+	('blair@hotmail.com','C:\\Users\\Articles\\Submitted\\article8.docx','2020-07-20'),
+	('blair@hotmail.com','C:\\Users\\Articles\\Submitted\\article10.docx','2020-07-20');
+
+INSERT INTO images VALUES
+	('C:\\Users\\Articles\\Submitted\\article1.docx','C:\\Users\\Articles\\Submitted\\image1.jpg');
